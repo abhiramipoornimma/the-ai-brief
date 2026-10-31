@@ -62,15 +62,21 @@ def approved_user(user_id):
 
 
 def handle_start(message):
+    logger.info("Telegram /start handling began")
     user = message.get("from", {})
     user_id = user.get("id")
     chat_id = message["chat"]["id"]
 
-    get_storage().register_user(
-        user_id,
-        user.get("username"),
-        user.get("first_name"),
-    )
+    try:
+        get_storage().register_user(
+            user_id,
+            user.get("username"),
+            user.get("first_name"),
+        )
+        logger.info("Supabase user registration succeeded")
+    except Exception:
+        logger.exception("Supabase user registration failed")
+        raise
 
     if not approved_user(user_id):
         send_message(
@@ -211,6 +217,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        logger.info("Webhook request reached Python handler; path=%s", path)
 
         if path not in ("/api", "/api/"):
             self.respond(404, {"error": "Not found"})
@@ -226,6 +233,11 @@ class handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             update = json.loads(self.rfile.read(length) or b"{}")
+            update_type = next(
+                (key for key in ("message", "edited_message", "channel_post", "edited_channel_post", "callback_query", "inline_query") if key in update),
+                "unknown",
+            )
+            logger.info("Telegram update received; path=%s update_type=%s", path, update_type)
 
             message = update.get("message") or update.get("edited_message")
             if message:
