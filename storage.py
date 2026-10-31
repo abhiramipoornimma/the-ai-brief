@@ -25,7 +25,7 @@ def get_supabase():
 
 
 def register_user(user_id, username=None, first_name=None):
-    """Register a Telegram user without granting approval."""
+    """Register, approve, and subscribe a Telegram user."""
     return (
         get_supabase()
         .table("telegram_users")
@@ -34,6 +34,8 @@ def register_user(user_id, username=None, first_name=None):
                 "telegram_user_id": user_id,
                 "username": username,
                 "first_name": first_name,
+                "is_approved": True,
+                "is_subscribed": True,
             },
             on_conflict="telegram_user_id",
         )

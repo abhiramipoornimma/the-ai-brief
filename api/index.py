@@ -74,8 +74,12 @@ def handle_start(message):
             user.get("first_name"),
         )
         logger.info("Supabase user registration succeeded")
-    except Exception:
-        logger.exception("Supabase user registration failed")
+    except Exception as exc:
+        # Avoid logging exception text, which can contain request or user data.
+        logger.error(
+            "Supabase user registration failed; error_type=%s",
+            type(exc).__name__,
+        )
         raise
 
     if not approved_user(user_id):
@@ -245,8 +249,11 @@ class handler(BaseHTTPRequestHandler):
 
             self.respond(200, {"ok": True})
 
-        except Exception:
-            logger.exception("Webhook update failed")
+        except Exception as exc:
+            logger.error(
+                "Webhook update failed; error_type=%s",
+                type(exc).__name__,
+            )
             self.respond(200, {"ok": True})
 
     def log_message(self, format, *args):
