@@ -568,11 +568,28 @@ def remove_duplicates(stories):
 # FILTER PREVIOUSLY SEEN STORIES
 # --------------------------------------------------
 
-def filter_previously_seen(stories):
-
-    initialize_database()
+def filter_previously_seen(stories, seen_hashes=None):
 
     new_stories = []
+
+    # Vercel mode: use story hashes retrieved from Supabase.
+    if seen_hashes is not None:
+
+        for story in stories:
+
+            identifier = title_hash(
+                story.get("title", "")
+            )
+
+            story["story_hash"] = identifier
+
+            if identifier not in seen_hashes:
+                new_stories.append(story)
+
+        return new_stories
+
+    # Local mode: continue using the existing SQLite database.
+    initialize_database()
 
     with sqlite3.connect(DB_PATH) as connection:
 
@@ -581,6 +598,8 @@ def filter_previously_seen(stories):
             identifier = title_hash(
                 story.get("title", "")
             )
+
+            story["story_hash"] = identifier
 
             result = connection.execute(
                 """

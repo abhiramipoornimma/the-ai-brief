@@ -49,9 +49,20 @@ report_lock = asyncio.Lock()
 # Prepare news reports
 # --------------------------------------------------
 
-def prepare_reports():
+def prepare_reports(use_supabase=False):
 
-    initialize_database()
+    if use_supabase:
+        from storage import get_seen_story_hashes
+
+        seen_hashes = get_seen_story_hashes()
+
+        logger.info("Using Supabase story history.")
+
+    else:
+        initialize_database()
+        seen_hashes = None
+
+        logger.info("Using local SQLite story history.")
 
     logger.info("Fetching news sources.")
 
@@ -75,7 +86,10 @@ def prepare_reports():
     logger.info("AI-relevant stories: %s", len(ai_stories))
 
     # Step 4: Exclude previously delivered stories.
-    new_stories = filter_previously_seen(ai_stories)
+    new_stories = filter_previously_seen(
+        ai_stories,
+        seen_hashes=seen_hashes
+    )
 
     logger.info("New stories: %s", len(new_stories))
 
@@ -103,13 +117,7 @@ def prepare_reports():
     )
 
     return reports
-
-
-# --------------------------------------------------
-# Send news report
-# --------------------------------------------------
-
-async def send_news_report(message):
+async def send_news_report(message, use_supabase=False):
 
     if report_lock.locked():
 
@@ -129,7 +137,8 @@ async def send_news_report(message):
         try:
 
             prepared_reports = await asyncio.to_thread(
-                prepare_reports
+                prepare_reports,
+                use_supabase=use_supabase
             )
 
             if not prepared_reports:
@@ -140,7 +149,6 @@ async def send_news_report(message):
 
                 return
 
-            # Build one combined Telegram message.
             combined_parts = []
 
             delivered_stories = []
@@ -150,14 +158,12 @@ async def send_news_report(message):
                 start=1
             ):
 
-                # Remove the repeated heading from each report.
                 story_text = report_text.replace(
                     "📰 <b>THE AI BRIEF</b>\n\n",
                     "",
                     1
                 )
 
-                # Add continuous story numbering.
                 story_text = story_text.replace(
                     "<b>",
                     f"<b>{index}. ",
@@ -176,7 +182,6 @@ async def send_news_report(message):
                 )
             )
 
-            # Telegram message limit is 4096 characters.
             if len(combined_report) > 4000:
 
                 raise ValueError(
@@ -186,16 +191,28 @@ async def send_news_report(message):
 
             await status_message.delete()
 
-            # Send all stories in one message.
             await message.reply_text(
                 combined_report,
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True
             )
 
-            # Mark stories as seen only after successful delivery.
+            # Save stories only after successful Telegram delivery.
             if delivered_stories:
-                mark_as_seen(delivered_stories)
+
+                if use_supabase:
+                    from storage import mark_stories_as_seen
+
+                    await asyncio.to_thread(
+                        mark_stories_as_seen,
+                        delivered_stories
+                    )
+
+                else:
+                    await asyncio.to_thread(
+                        mark_as_seen,
+                        delivered_stories
+                    )
 
             logger.info(
                 "Combined news report delivered successfully."
